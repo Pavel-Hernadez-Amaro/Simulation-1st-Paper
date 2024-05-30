@@ -220,7 +220,7 @@ for (ind in 1:N) {
   
 }
 
-j=77 #22 40 50 77
+j=1 #22 40 50 95
 
 prod=as.matrix(kronecker(BB_EPOC$B_Phi[[j]]$B,t(BB_EPOC$B_T$B[j,])))
 
@@ -267,8 +267,11 @@ for (ind in 1:N) {
   
 }
 
+case=1
 
-Heat_map_data=data.frame(t=t_dat,M=T_dat,Beta=Beta_estimated)
+aux=c(t(Beta_All[[case]]))
+
+Heat_map_data=data.frame(t=t_dat,M=T_dat,Beta=aux) #Beta=Beta_estimated
 Heat_map_data=Heat_map_data[t_dat <= T_dat,]
 Heat_map_data$IND=IND
 
