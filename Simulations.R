@@ -11,8 +11,10 @@ library(gridExtra)
 library(dismo)
 options(error=NULL)
 library(remotes)
-# install_github("Pavel-Hernadez-Amaro/VDPO")
+# install_github("Pavel-Hernadez-Amaro/VDPO") 
 library(VDPO)
+
+# 21
 
 ########### Here we generate the data and set some fixed parameters
 
@@ -26,7 +28,7 @@ k=10  # SIZE OF THE TEST DATA SET
 
 fold=N/k
 
-case=2 # THIS IS THE TOTAL NUMBER OF SCENARIOS SIMULATED 
+case=1 # THIS IS THE TOTAL NUMBER OF SCENARIOS SIMULATED 
 
 c1=30
 c2=30
@@ -51,6 +53,8 @@ Beta_VD=Beta_FFVD=array(dim =c(N,J,R,case))
 
 error_Beta_FFVD=error_Beta_VD=array(dim =c(R,case))
 # #
+
+Beta_FFVD_sup_ind=Beta_FFVD_inf_ind=vector(mode = "list",length = R)
 
 # EMPTY LISTS THAT WILL BE THE ESTIMATED FUNCTIONAL COEFFICIENTS USING THE Gellar APPROACH
 Beta_G=list() 
@@ -88,7 +92,7 @@ Y_ERROR_2_sop=array(dim = c(R,case))
 
 start=proc.time() 
 
-for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE 
+for (iter_out in case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE 
   
   print(c("case = ",iter_out))
   
@@ -98,9 +102,9 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     set.seed(1000+iter) 
     
-    M = round(runif(N,10,J),digits = 0) # HERE WE GENERATE THE DOMAIN FOR ALL SUBJECTS WITH A MINIMUM OF A 10 OBSERVATIONS
+    # M = round(runif(N,10,J),digits = 0) # HERE WE GENERATE THE DOMAIN FOR ALL SUBJECTS WITH A MINIMUM OF A 10 OBSERVATIONS
     
-    # M = rnegbin(N,24,1) # Para 1000 poner (240,2)
+    M = rnegbin(N,24,1) # Para 1000 poner (240,2)
     
     if (max(M)>J) {
       # print("si")
@@ -129,27 +133,17 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     X_s=matrix(NA,N,M_max) # NOT NOISY
     
+    A <- runif(N, 1, 3)
+    phi <- rnorm(N, 0, 1)
+    C <- runif(N, 0, 1)
     
     for (i in 1:N) {
       
-      u=rnorm(1)
+      sine_curve <- A[i] * sin(2*pi*t + phi[i]) + C[i]
+      normalized_curve <- (sine_curve - min(sine_curve)) / (max(sine_curve) - min(sine_curve))
       
-      temp=matrix(NA,5,M_max)
-      
-      for (aux in 1:5) {
-        
-        v_i1=rnorm(1,0,4/aux^2)
-        
-        
-        temp[aux,1:M[i]]=v_i1*sin(2*pi*aux*(1:M[i])/M_max)
-      }
-      
-      B=apply(temp,2,sum)
-      
-      B=B+u
-      
-      X_s[i,]=B 
-      X_se[i,]=(B)+rnorm(M_max,0,2.5) # WE ADD NOISE
+      X_s[i,1:M[i]]=normalized_curve[1:M[i]]
+      X_se[i,1:M[i]]=X_s[i,1:M[i]]+rnorm(M[i],0,0.25) # WE ADD NOISE
       
     }
     
@@ -175,7 +169,7 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       # TRUE FUNCTIONAL COEFFICIENTS
       
       Beta[i,1:(M[i]),1]=(2*sin(0.5*pi*(t[1:M[i]]-M[i])/J)+4*sin(1.5*pi*(t[1:M[i]]-M[i])/J)+5*sin(2.5*pi*t[1:M[i]]))/10
-      Beta[i,1:(M[i]),2]=(exp(-2*((t[1:M[i]]-0.75))) - exp(-2*((t[1:M[i]]-0.5))))/10
+      Beta[i,1:(M[i]),2]=((4*t[1:M[i]] - M[i]/J)^3 - (12*t[1:M[i]] - M[i]/J))/10 #100*((t[1:M[i]])^2)/M[i]#(exp(t[1:M[i]]-t[M[i]])^2)
       
       # HERE WE GENERATE THE RESPONSE VARIABLE FOR EVERY BETA FROM THE 2 DIFFERENT FUNCTIONAL DATA (NOISY AND OTHERWISE)  
       
@@ -192,7 +186,7 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     var_e <- (1 / Rsq - 1) * stats::var(nu) # (1-Rsq)*var(nu[ind,])
     
-    # y=nu+rnorm(N,sd = var_e) # ADDING NOISE TO THE GAUSSIAN MODEL 
+    # y=nu+rnorm(N,sd = var_e) # ADDING NOISE TO THE GAUSSIAN MODEL
     
     y=rpois(N,exp(nu)) # POISSON MODEL ##### CAHNGE THE ERROR EQUATIONS IN LINE 477
     
@@ -245,8 +239,8 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       data_test[["X_test"]]=X_test
       
       start_SOP=proc.time()
-      formula <- y_train ~ ffvd(X_train,nbasis = c(c1,c2,c3))
-      BB=ffvd(X_train,nbasis = c(c1,c2,c3))
+      formula <- y_train ~ ffvd(X_train, t, nbasis = c(c1,c2,c3))
+      BB=ffvd(X_train, t, nbasis = c(c1,c2,c3))
       res <- VDPO(formula = formula, data = data_train,family = poisson())
       
       
@@ -288,7 +282,7 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       ############# HERE WE CALCULATE THE ERROR OF THE ESTIMATED RESPONSE VARIABLE
       
-      BB_test=ffvd(X_test,nbasis = c(c1,c2,c3))
+      BB_test=ffvd(X_test, t, nbasis = c(c1,c2,c3))
       
       y_h_sop[iter,,iter_out] = BB_test$B_ffvd %*% res$theta_ffvd # ESTIMATED REPSONSE VARIABLE USING OUR APPROACH
       
@@ -335,12 +329,32 @@ for (iter_out in 1:case) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     # HERE WE ESTIMATE THE FUNCTIONAL COEFFICIENT 
     
-    formula <- y ~ ffvd(X_se,nbasis = c(c1,c2,c3))
+    formula <- y ~ ffvd(X_se, t, nbasis = c(c1,c2,c3))
     res <- VDPO(formula = formula, data = data,family = poisson())
     
     Beta_FFVD[,1:M_max,iter,iter_out]=res$Beta_ffvd[[1]]
     
     error_Beta_FFVD[iter,iter_out]=sum(((Beta[,,iter_out]-Beta_FFVD[,1:M_max,iter,iter_out])^2)/(J*(J+1)), na.rm=TRUE)
+    
+    Beta_FFVD_inf=Beta_FFVD_sup=matrix(nrow = N,ncol = M_max)
+    
+    aux_base=ffvd(X_se, t, nbasis = c(c1,c2,c3))
+    
+    for (aux_ind in 1:N) {
+
+      prod=as.matrix(kronecker(aux_base$L_Phi[[aux_ind]]$B,t(aux_base$B_T$B[aux_ind,])))
+      
+      var_curve = diag(prod %*% res$covar_theta %*% t(prod))
+    
+      std_curve=sqrt(var_curve)
+      
+      Beta_FFVD_inf[aux_ind,1:M[aux_ind]] =  Beta_FFVD[aux_ind,1:M[aux_ind],iter,iter_out] - 1.96*std_curve
+      Beta_FFVD_sup[aux_ind,1:M[aux_ind]] =  Beta_FFVD[aux_ind,1:M[aux_ind],iter,iter_out] + 1.96*std_curve
+      
+    }
+    
+    Beta_FFVD_inf_ind[[iter]]=Beta_FFVD_inf
+    Beta_FFVD_sup_ind[[iter]]=Beta_FFVD_sup
     
     #####
     
@@ -391,10 +405,10 @@ Y_ERRORES=data.frame(Y_ERROR_2_ellos,Y_ERROR_2_te_ellos,Y_ERROR_2_sop) # #Y_ERRO
 # 
 # write_xlsx(Y_ERRORES,path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones K-fold good version N_200/Poisson_Uniform_N_200/Y_ERRORES.xlsx")
 
-
+Y_values=cbind(c(Y_ERRORES[,1],Y_ERRORES[,2],Y_ERRORES[,3]))
 Y_values_1=cbind(c(Y_ERRORES[,1],Y_ERRORES[,3],Y_ERRORES[,5]))
 Y_values_2=cbind(c(Y_ERRORES[,2],Y_ERRORES[,4],Y_ERRORES[,6]))
-Y_ERRORES_DF=data.frame(values=Y_values_1,method=as.factor(c(rep("VDFR",R),rep("SOF",R),rep("FF-VDFR",R))))
+Y_ERRORES_DF=data.frame(values=Y_values_2,method=as.factor(c(rep("VDFR",R),rep("SOF",R),rep("FF-VDFR",R))))
 
 Y_plot=ggplot(Y_ERRORES_DF,aes(x=method,y=values,fill=method))+
   geom_violin()+
@@ -406,6 +420,7 @@ Y_plot=ggplot(Y_ERRORES_DF,aes(x=method,y=values,fill=method))+
 
 Y_plot
 
+B_values=cbind(c(B_ERRORES[,1],B_ERRORES[,2]))
 B_values_1=cbind(c(B_ERRORES[,1],B_ERRORES[,3]))
 B_values_2=cbind(c(B_ERRORES[,2],B_ERRORES[,4]))
 B_ERRORES_DF=data.frame(values=B_values_2,method=as.factor(c(rep("FF-VDFR",R),rep("VDFR",R))))
@@ -420,3 +435,12 @@ B_plot=ggplot(B_ERRORES_DF,aes(x=method,y=values,fill=method))+
 
 B_plot
 
+apply(X_s, 1, range,na.rm=TRUE)
+
+case=100
+case_iter=which.min(B_ERRORES_DF[1:R,1])
+
+plot(Beta_FFVD[case,,case_iter,iter_out],ylim=c(-2,2))
+lines(Beta_FFVD_inf_ind[[case_iter]][case,],col="blue",lty=2,lwd=2)
+lines(Beta_FFVD_sup_ind[[case_iter]][case,],col="red",lty=2,lwd=2)
+abline(h=0)
