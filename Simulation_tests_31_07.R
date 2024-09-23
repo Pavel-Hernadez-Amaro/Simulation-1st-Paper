@@ -2,6 +2,7 @@ library(refund)
 library(fda)
 library(mgcv)
 library(SOP)
+library(plotly)
 library(expm)
 library(writexl)
 library(Tplyr)
@@ -22,13 +23,13 @@ N=100 # NUMBER OF SUBJECTS
 
 J=100 # NUMBER OF MAXIMUM OBSERVATIONS PER SUBJECTS
 
-k=4  # NUMBER OF GROUPS IN THE K-fold
+k=10  # NUMBER OF GROUPS IN THE K-fold
 
 fold=N/k
 
-R=100 # NUMBER OF ITERATIONS FOR THE SIMULATION STUDY
+R=50 # NUMBER OF ITERATIONS FOR THE SIMULATION STUDY
 
-c1=25
+c1=30
 c2=50
 c3=30
 
@@ -76,6 +77,7 @@ y_h_ellos_te=array(dim=c(R,fold,case))
 y_h_sop=array(dim=c(R,fold,case))
 y_h_no_vc=array(dim=c(R,fold,case))
 y_h_adaptive=array(dim=c(R,fold,case))
+y_h_sop_all=y_h_ellos_all=array(dim=c(R,N,case))
 #
 
 # EMPTY ARRAYS WHERE THE ERROR OF THE ESTIMATED COEFFICIENT FUNCTION WILL BE STORE FOR EVERY ITERATION IN EVERY ESCANARIO
@@ -92,11 +94,13 @@ error_group_FF_VDFR=error_group_SB=error_group_Carmen=error_group_VDFR=array(dim
 # EMPTY ARRAYS WHERE THE ERROR OF THE ESTIMATED RESPOND VARIABLE WILL BE STORE FOR EVERY ITERATION IN EVERY ESCANARIO
 Y_ERROR_2_ellos=Y_ERROR_2_te_ellos=array(dim = c(R,case))
 Y_ERROR_2_sop=Y_ERROR_2_no_vc=Y_ERROR_2_sop_ad=Y_ERROR_2_sop_manual=array(dim = c(R,case))
+
+err_y_ellos_all=err_y_sop_all=rep(0,R)
 #
 
 start=proc.time()
 
-for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
+for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
   
   print(c("case = ",iter_out))
   
@@ -107,6 +111,8 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     set.seed(1000+iter)
     
     M = round(runif(N,10,J),digits = 0) # HERE WE GENERATE THE DOMAIN FOR ALL SUBJECTS WITH A MINIMUM OF A 10 OBSERVATIONS
+    
+    # M=sort(rep((J-9):J,10)) #rep((1:5)*10,20)
     
     # M = rnegbin(N,24,1) # Para 1000 poner (240,2)
     
@@ -126,9 +132,9 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     M_max=max(M)
     
-    t=seq(from = 0, to = 1, length.out=M_max)
+    # t=seq(from = 0, to = 1, length.out=M_max)
     
-    # t=1:M_max
+    t=1:M_max
     
     M_it[iter,,iter_out]=M # WE STORE THE DOMAINS FOR EVERY ITERATION AND SCENARIO
     
@@ -150,7 +156,7 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
         v_i1=rnorm(1,0,4/e^2)
         v_i2=rnorm(1,0,4/e^2)
         
-        temp[e,1:M[i]]=v_i1*sin(2*pi*e*(1:M[i])/100)+v_i2*cos(2*pi*e*(1:M[i])/100)
+        temp[e,1:M[i]]=v_i1*sin(2*pi*e*(1:M[i])/J)+v_i2*cos(2*pi*e*(1:M[i])/J)
       }
       
       B=apply(temp,2,sum)
@@ -158,10 +164,17 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       B=B+u
       
       X_s[i,]=B
-      X_se[i,]=(B)+rnorm(M_max,0,1.5) # WE ADD NOISE
+      
+      aux=var(B,na.rm=TRUE)
+      
+      X_se[i,]=(B)+rnorm(M_max,0,aux/4) # WE ADD NOISE
       
     }
     
+    # j=10
+    # plot(X_s[j,])
+    # lines(X_se[j,],col=3,type="o")
+
     X_reg = t(apply(X_se, 1,registrated_points)) # THESE ARE THE REGISTRATED POINTS
     
     # SOME SAVE CHECKS FOR UNWANTED NAs
@@ -192,18 +205,21 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       # HERE WE GENERATE THE RESPONSE VARIABLE FOR EVERY BETA FROM THE 2 DIFFERENT FUNCTIONAL DATA (NOISY AND OTHERWISE)
       
-      if (iter_out==8) {
-        nu[i]=sum(X_se[i,]*Beta[i,,4],na.rm = 1)/(M[i]) # NOISY
-      }
-      if (iter_out<=4) {
-        nu[i]=sum(X_s[i,]*Beta[i,,iter_out],na.rm = 1)/(M[i]) #NOT NOISY
-      }
-      if(iter_out>4 & iter_out<8){
-        nu[i]=sum(X_se[i,]*Beta[i,,iter_out%%4],na.rm = 1)/M[i] # NOISY
-      }
+      nu[i]=sum(X_s[i,]*Beta[i,,iter_out],na.rm = 1)/(M[i]) #NOT NOISY
+      
+      # if (iter_out==8) {
+      #   nu[i]=sum(X_se[i,]*Beta[i,,4],na.rm = 1)/(M[i]) # NOISY
+      # }
+      # if (iter_out<=4) {
+      #   nu[i]=sum(X_s[i,]*Beta[i,,iter_out],na.rm = 1)/(M[i]) #NOT NOISY
+      # }
+      # if(iter_out>4 & iter_out<8){
+      #   nu[i]=sum(X_se[i,]*Beta[i,,iter_out%%4],na.rm = 1)/M[i] # NOISY
+      # }
       
     }
     
+    # plot_ly(z=Beta[,,2], type="surface")
     
     var_e <- (1 / Rsq - 1) * stats::var(nu) # (1-Rsq)*var(nu[ind,])
     
@@ -227,26 +243,47 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     # ASSIGNING THE TRAIN AND TEST SETS 
     
-    groups=kfold(data,k=k) # creating the K-fold groups    
+    groups=kfold(data,k=k) #rep(1:k,fold) # # creating the K-fold groups
+    
+
     
     for (group in 1:k) {
       
+      test=which(groups==group)
+      train=which(groups!=group)
+      
+      if (M[tail(train,1)]!=M_max) {
+
+        aux=test[length(test)]
+        test[length(test)]=train[length(train)]
+        train[length(train)]=aux
+        test=sort(test)
+      }
+      
+      if (M[head(train,1)]!=min(M)) {
+        
+        aux=test[1]
+        test[1]=train[1]
+        train[1]=aux
+        test=sort(test)
+      }
+      
       print(c("group = ",group))
       
-      X_test=X_se[which(groups==group),]
-      X_train=X_se[-which(groups==group),]
+      X_test=X_se[test,]
+      X_train=X_se[train,]
       
-      X_reg_train=X_reg[-which(groups==group),]
-      X_reg_test=X_reg[which(groups==group),]
+      X_reg_train=X_reg[train,]
+      X_reg_test=X_reg[test,]
       
-      M_test=M[which(groups==group)]
-      M_train=M[-which(groups==group)]
+      M_test=M[test]
+      M_train=M[train]
       
       M_it_test[iter,,iter_out]=M_test
       M_it_train[iter,,iter_out]=M_train
       
-      y_test=y[which(groups==group)]
-      y_train=y[-which(groups==group)]
+      y_test=y[test]
+      y_train=y[train]
       
       # MODEL ESTIMATION BY OUR APPROACH
 
@@ -257,10 +294,13 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       data_test[["X_test"]]=X_test
       
       start_SOP=proc.time()
-      formula <- y_train ~ ffvd(X_train, t, nbasis = c(c1,c2,c3))
-      BB=ffvd(X_train, t, nbasis = c(c1,c2,c3))
-      res <- VDPO(formula = formula, data = data_train)#,family = poisson())
+      # formula <- y ~ ffvd(X_se, t, nbasis = c(c1,c2,c3))
+      # BB=ffvd(X_se, t[1:max(M)], nbasis = c(c1,c2,c3))
+      # res <- VDPO(formula = formula, data = data)#,family = poisson())
       
+      formula <- y_train ~ ffvd(X_train, t, nbasis = c(c1,c2,c3))
+      BB=ffvd(X_train, t[1:max(M_train)], nbasis = c(c1,c2,c3))
+      res <- VDPO(formula = formula, data = data_train)#,family = poisson())
       
       end_SOP=proc.time()
       time_SOP[iter,iter_out]=end_SOP[1]-start_SOP[1]
@@ -280,7 +320,7 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       start_Goldsmith=proc.time()
       
-      fit_Gellar_te <- pfr(y_train ~ lf(X_reg_train, bs = "ps",k=25,presmooth = "bspline",presmooth.opts = list(nbasis=25)))#,family = poisson())
+      fit_Gellar_te <- pfr(y_train ~ lf(X_reg_train, bs = "ps",k=15,presmooth = "bspline",presmooth.opts = list(nbasis=15)))#,family = poisson())
       
       end_Goldsmith=proc.time()
       time_Goldsmith[iter,iter_out]=end_Goldsmith[1]-start_Goldsmith[1]
@@ -300,9 +340,12 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       ############# HERE WE CALCULATE THE ERROR OF THE ESTIMATED RESPONSE VARIABLE
       
-      BB_test=ffvd(X_test, t, nbasis = c(c1,c2,c3))
+      BB_test=ffvd(X_test, t[1:max(M_test)], nbasis = c(c1,c2,c3))
+      # 
+      # as.matrix(kronecker(BB_test$L_Phi[[1]], t(BB_test$B_T[[1]][j,]))) %*% res$theta_ffvd
+      # 
+      # y_h_sop[iter,,iter_out] = BB_test$B_ffvd %*% res$theta_ffvd # ESTIMATED REPSONSE VARIABLE USING OUR APPROACH
       
-      y_h_sop[iter,,iter_out] = BB_test$B_ffvd %*% res$theta_ffvd # ESTIMATED REPSONSE VARIABLE USING OUR APPROACH
       
       # ESTIMATED REPSONSE VARIABLE USING HE GELLAR AND GOLDSMITH APPROACHES
       
@@ -322,9 +365,31 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
         y_h_ellos[iter,j,iter_out] = sum(X_test[j,1:M_it_test[iter,j,iter_out]]*Beta_refund,na.rm = 1)/M_it_test[iter,j,iter_out]
         
         y_h_ellos_te[iter,j,iter_out] = sum(X_test[j,1:M_it_test[iter,j,iter_out]]*Beta_refund_te,na.rm = 1)/M_it_test[iter,j,iter_out]
+        #
         
+        # Beta_sop=as.matrix(kronecker(BB_test$L_Phi[[1]][1:M_it_test[iter,j,iter_out],], t(BB_test$B_T[[1]][j,]))) %*% res$theta_ffvd
+        
+        # Beta_sop_2=as.matrix(kronecker(BB$L_Phi[[1]][1:M_it_test[iter,j,iter_out],], t(BB$B_T[[1]][test[j],]))) %*% res$theta_ffvd
+        
+        
+        B_T_fold=splines::spline.des(BB$B_T$knots, M_test[j], 3 + 1, 0 * M_test[j])$design
+        L_Phi_fold=splines::spline.des(BB$L_Phi$knots, t[1:M_test[j]], 3 + 1, 0 * t[1:M_test[j]])$design
+        
+        Beta_sop=as.matrix(kronecker(L_Phi_fold,B_T_fold)) %*% res$theta_ffvd
+        
+        y_h_sop[iter,j,iter_out]=sum(BB_test$X_hat[j,1:M_it_test[iter,j,iter_out]]*Beta_sop,na.rm = 1)/M_it_test[iter,j,iter_out]
         
       }
+      
+      # j=10
+      # plot(Beta[which(groups==group)[j],,2])
+      # lines(Beta_sop,col=2)
+      # lines(Beta_refund)
+      # 
+      # 
+      # plot(X_s[test[j],])
+      # lines(X_test[j,1:M_it_test[iter,j,iter_out]],col=3,type="o")
+      # lines(BB_test$X_hat[j,1:M_it_test[iter,j,iter_out]],col=2,type="o")
       
       # ESTIMATION ERRORS FOR THE TEST DATA SET IN THE CASE OF NORMAL RESPONSE
       
@@ -348,7 +413,8 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     # HERE WE ESTIMATE THE FUNCTIONAL COEFFICIENT 
     
     formula <- y ~ ffvd(X_se, t, nbasis = c(c1,c2,c3))
-    res <- VDPO(formula = formula, data = data)#,family = poisson())
+    BB_all=ffvd(X_se, t, nbasis = c(c1,c2,c3))
+    res_Beta <- VDPO(formula = formula, data = data)#,family = poisson())
 
   #   B_data=ffvd(X_se, t, nbasis = c(c1,c2,c3))
   #   
@@ -371,7 +437,7 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
   #     
   #   }
   #   
-    Beta_FFVD[,1:M_max,iter,iter_out]=res$Beta_ffvd[[1]]
+    Beta_FFVD[,1:M_max,iter,iter_out]=res_Beta$Beta_ffvd[[1]]
     
     error_Beta_FFVD[iter,iter_out]=sum(((Beta[,,iter_out]-Beta_FFVD[,1:M_max,iter,iter_out])^2)/(J*(J+1)), na.rm=TRUE)
     
@@ -383,7 +449,7 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       prod=as.matrix(kronecker(aux_base$L_Phi$B[1:M[aux_ind],],t(aux_base$B_T$B[aux_ind,])))
       
-      var_curve = diag(prod %*% res$covar_theta %*% t(prod))
+      var_curve = diag(prod %*% res_Beta$covar_theta %*% t(prod))
       
       std_curve=sqrt(var_curve)
       
@@ -413,7 +479,17 @@ for (iter_out in 1) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     error_Beta_VD[iter,iter_out]=sum(((Beta[,,iter_out]-Beta_VD[,1:M_max,iter,iter_out])^2)/(J*(J+1)), na.rm=TRUE)
     
+    for (j in 1:N) {
+      
+      y_h_ellos_all[iter,j,iter_out] = sum(X_se[j,1:M[j]]*Beta_VD[j,1:M[j],iter,iter_out],na.rm = 1)/M[j]        
+      y_h_sop_all[iter,j,iter_out] = sum(BB_all$X_hat[j,1:M[j]]*Beta_FFVD[j,1:M[j],iter,iter_out],na.rm = 1)/M[j]      
+      
+      }
     
+    err_y_sop_all[iter]=sqrt(sum((y-y_h_sop_all[iter,,iter_out])^2)/N)
+    err_y_ellos_all[iter]=sqrt(sum((y-y_h_ellos_all[iter,,iter_out])^2)/N)
+      
+
     
   } # HERE ENDS THE MIDDLE FOR ITERATION (RUNS ON R) 
   
@@ -433,6 +509,12 @@ err_B_VD=apply(X = error_Beta_VD, MARGIN = 2, FUN = mean)
 err_Y_FFVD=apply(X = Y_ERROR_2_sop, MARGIN = 2, FUN = mean)
 err_Y_VD=apply(X = Y_ERROR_2_ellos, MARGIN = 2, FUN = mean)
 err_Y_SOF=apply(X = Y_ERROR_2_te_ellos, MARGIN = 2, FUN = mean)
+
+case_iter=1
+
+plot_ly(z=Beta_VD[,,case_iter,2], type="surface")
+plot_ly(z=Beta_FFVD[,,case_iter,2], type="surface")
+plot_ly(z=Beta[,,2], type="surface")
 
 # save.image("C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/1er Paper/Codigo/Simulation-1st-Paper/Results new method/vacations.RData")
 
@@ -488,264 +570,8 @@ lines(Beta_FFVD_inf_ind[[case_iter]][case,],col="blue",lty=2,lwd=2)
 lines(Beta_FFVD_sup_ind[[case_iter]][case,],col="red",lty=2,lwd=2)
 abline(h=0)
 
-# B_ERRORES_test=data.frame(B_ERROR_2_ellos_test,B_ERROR_2_te_ellos_test,B_ERROR_2_sop_test,B_ERROR_2_sop_ad_test) #B_ERROR_2,B_ERROR_2_te,
-# 
-# B_ERRORES=data.frame(B_ERROR_2_ellos,B_ERROR_2_te_ellos,B_ERROR_2_sop,B_ERROR_2_sop_ad) #B_ERROR_2,B_ERROR_2_te,
-# 
-# Y_ERRORES=data.frame(Y_ERROR_2_ellos,Y_ERROR_2_te_ellos,Y_ERROR_2_sop,Y_ERROR_2_no_vc) #,Y_ERROR_2_sop_manual) #Y_ERROR_2,Y_ERROR_2_te,
-# 
-# write_xlsx(B_ERRORES,path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones K-fold good version N_200/Normal_NegBin_N_200/B_ERRORES.xlsx")
-# 
-# write_xlsx(Y_ERRORES,path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones K-fold good version N_200/Normal_NegBin_N_200/Y_ERRORES.xlsx")
-# 
-# save.image("Normal_NegBin_N_200.Rdata")
-# 
-# # save(list = ls()[40],file = "Normal_Uniform_N_200_results.Rdata")
-# 
-# # SELECT THE SCENARIO TO PLOT 
-# 
-# scenario=8
-# 
-# VDFR=scenario
-# Goldsmith=1*8+scenario
-# FF_VDFR=2*8+scenario
-# SB_VDFR=3*8+scenario
-# 
-# Y_values=rbind(as.matrix(Normal_NegBin_N_200_results$Y_ERRORES[,VDFR]),as.matrix(Normal_NegBin_N_200_results$Y_ERRORES[,Goldsmith]),as.matrix(Normal_NegBin_N_200_results$Y_ERRORES[,FF_VDFR]),as.matrix(Normal_NegBin_N_200_results$Y_ERRORES[,SB_VDFR]))
-# Y_ERRORES_DF=data.frame(values=Y_values,method=as.factor(c(rep("VDFR",Normal_NegBin_N_200_results$R),rep("Goldsmith",Normal_NegBin_N_200_results$R),rep("FF_VDFR",Normal_NegBin_N_200_results$R),rep("SB_VDFR",Normal_NegBin_N_200_results$R))))
-# 
-# Y_plot=ggplot(Y_ERRORES_DF,aes(x=method,y=values,fill=method))+
-#   geom_violin()+
-#   ylab("Error") +
-#   scale_x_discrete(labels = NULL, breaks = NULL)+
-#   xlab("")+
-#   theme_bw() +
-#   stat_summary(fun=median, geom="point", size=2, color="black")
-# 
-# Y_plot
-# 
-# B_values=rbind(as.matrix(Normal_NegBin_N_200_results$B_ERRORES[,VDFR]),as.matrix(Normal_NegBin_N_200_results$B_ERRORES[,FF_VDFR]))
-# B_ERRORES_DF=data.frame(values=B_values,method=as.factor(c(rep("VDFR",Normal_NegBin_N_200_results$R),rep("FF-VDFR",Normal_NegBin_N_200_results$R))))
-# 
-# B_plot=ggplot(B_ERRORES_DF,aes(x=method,y=values,fill=method))+
-#   geom_violin()+
-#   ylab("Error") +
-#   scale_x_discrete(labels = NULL, breaks = NULL)+
-#   xlab("")+
-#   theme_bw() +
-#   stat_summary(fun=median, geom="point", size=2, color="black")
-# 
-# B_plot
-# 
-# ######################
-# #############
-# ######
-# 
-# 
-# # scenario=8
-# # 
-# # Gellar=scenario
-# # Gellar_te=1*8+scenario
-# # New_approach=2*8+scenario
-# # NO_VC=3*8+scenario
-# # 
-# # # aux_b_er=which(B_ERRORES[,New_approach]>0.075)
-# # 
-# # boxplot(B_ERRORES[,c(Gellar,New_approach)],pars  =  list(xaxt = "n"),xlab="")
-# # axis(1, at=c(1,2),gap.axis = 0.75, labels = c("Gellar","New Approach"))
-# # 
-# # 
-# # # aux_er_Gellar=which(Y_ERRORES[,c(Gellar)]>15)
-# # # aux_er_Gellar_te=which(Y_ERRORES[,c(Gellar_te)]>15)
-# # # aux_er_SOP=which(Y_ERRORES[,c(New_approach)]>15)
-# # 
-# # # aux=c(aux_er_Gellar_te,aux_er_SOP)
-# # 
-# # boxplot(Y_ERRORES[,c(Gellar,Gellar_te,New_approach,NO_VC)],pars  =  list(xaxt = "n"),xlab="")
-# # axis(1, at=c(1,2,3,4),gap.axis = 0.75, labels = c("VDFR","Goldsmith","FF-VDFR","SB-VDFR"))
-# # 
-# # 
-# # 
-# # ############# IN CASE WE NEED SOME METRICS OF THE ERRORS
-# # 
-# # #  case=8
-# # # 
-# # # Gellar=case
-# # # Gellar_te=1*8+case
-# # # New_approach=2*8+case
-# # # # Adaptive=3*8+case
-# # # 
-# # # c(mean(Y_ERRORES[,c(Gellar)]),mean(Y_ERRORES[,c(Gellar_te)]),mean(Y_ERRORES[,c(New_approach)]))
-# # # # mean(Y_ERRORES[,c(Adaptive)])
-# # # 
-# # # c(median(Y_ERRORES[,c(Gellar)]),median(Y_ERRORES[,c(Gellar_te)]), median(Y_ERRORES[,c(New_approach)]))
-# # # # median(Y_ERRORES[,c(Adaptive)])
-# # # 
-# # # c(sd(Y_ERRORES[,c(Gellar)]), sd(Y_ERRORES[,c(Gellar_te)]), sd(Y_ERRORES[,c(New_approach)]))
-# # # # sd(Y_ERRORES[,c(Adaptive)])
-# # # 
-# # # c(mean(B_ERRORES[,c(Gellar)]), mean(B_ERRORES[,c(New_approach)]))
-# # # 
-# # # # mean(B_ERRORES[,c(Adaptive)])
-# # # 
-# # # c(median(B_ERRORES[,c(Gellar)]), median(B_ERRORES[,c(New_approach)]))
-# # # 
-# # # #median(B_ERRORES[,c(Adaptive)])
-# # # 
-# # # c(sd(B_ERRORES[,c(Gellar)]), sd(B_ERRORES[,c(New_approach)]))
-# # #   
-# # # #sd(B_ERRORES[,c(Adaptive)])
-# # # #
-# # 
-# # #### MEANS TO AN EXCEL FILE
-# # 
-# # Y_means=colMeans(Y_ERRORES)
-# # B_means=colMeans(B_ERRORES)[1:24]
-# # b_matrix=matrix(data = B_means,nrow = 3,byrow = 1)
-# # 
-# # Y_matrix=matrix(data = Y_means,nrow = 4,byrow = 1)
-# # 
-# # B_matrix=b_matrix[-2,]
-# # 
-# # # write_xlsx(as.data.frame(Y_matrix),path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Normal/T_i NegBin/N=100/Despues de IWSM/Y_means.xlsx")
-# # 
-# # # write_xlsx(as.data.frame(B_matrix),path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Normal/T_i NegBin/N=100/Despues de IWSM/B_means.xlsx")
-# # 
-# # write_xlsx(as.data.frame(Y_matrix[4,]),path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Poisson/T_i Uniform/N = 500/Y_means_no_vc.xlsx")
-# # 
-# # 
-# # ############ SD TO AN EXCEL FILE
-# # 
-# # Y_std=matrix(0,nrow = 3,ncol=32)
-# # B_std=matrix(0,nrow = 3,ncol=24)
-# # q_ric_B=q_ric_Y=NULL
-# # N_cases=c(100,200,500)
-# # outliers_B=outliers_Y=list()
-# # 
-# # for (i_ind in 1:3) {
-# #   
-# #   print(c("i_ind =",i_ind))
-# #   
-# #   if (i_ind%%3==1) {
-# #     
-# #     texto="N = 100/Data.RData"
-# #     texto_env="N = 100/Data_no_vc.RData"
-# #   }
-# #   if (i_ind%%3==2) {
-# #     
-# #     texto="N = 200/Data.RData"
-# #     texto_env="N = 200/Data_no_vc.RData"
-# #   }
-# #   if (i_ind%%3==0) {
-# #     
-# #     texto="N = 500/Data.RData"
-# #     texto_env="N = 500/Data_no_vc.RData"
-# #   }
-# #   
-# #   nam_X <- paste("C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Poisson/T_i Uniform/", texto ,sep="")
-# #   
-# #   load(nam_X)
-# #   
-# #   nam_env=paste("env","NegBin_POISSON_N",N_cases[i_ind],sep = "_")
-# #   
-# #   env_global=assign(nam_env,new.env())
-# #   
-# #   nam_load=paste("C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Poisson/T_i Uniform/", texto_env, sep="")
-# #   
-# #   load(nam_load, envir = get(nam_env))
-# #   
-# #   Y_ERRORES[,25:32]=env_global$Y_ERRORES[,25:32]
-# #   
-# #   for (iind in 1:(dim(Y_ERRORES)[2])) {
-# #     
-# #     nam_RIC_Y=paste("RIC_case_Y",iind,sep = "_")
-# #     
-# #     q_Y=quantile(Y_ERRORES[,iind])
-# #     
-# #     q_ric_Y[iind]=assign(nam_RIC_Y,q_Y[4]-q_Y[2]) #sqrt(diag(var(Y_ERRORES)))
-# #     
-# #     outliers_Y[[iind]]=which(Y_ERRORES[,iind]>q_Y[4]+1.5*q_ric_Y[iind] | Y_ERRORES[,iind]<q_Y[2]-1.5*q_ric_Y[iind])
-# #     
-# #     if (iind<25) {
-# #       
-# #       nam_RIC_B=paste("RIC_case_B",iind,sep = "_")
-# #       
-# #       q_B=quantile(B_ERRORES[,iind])
-# #       
-# #       q_ric_B[iind]=assign(nam_RIC_B,q_B[4]-q_B[2]) #sqrt(diag(var(Y_ERRORES)))
-# #       
-# #       outliers_B[[iind]]=which(B_ERRORES[,iind]>q_B[4]+1.5*q_ric_B[iind] | B_ERRORES[,iind]<q_B[2]-1.5*q_ric_B[iind])
-# #       
-# #     }
-# #     
-# #   }
-# #   
-# #   for (j_ind in 1:32) {
-# #     
-# #     print(c("j_ind =",j_ind))
-# #     
-# #     # case=j_ind
-# #     # 
-# #     # Gellar=case
-# #     # Gellar_te=1*8+case
-# #     # New_approach=2*8+case
-# #     # NO_VC=3*8+case
-# #     
-# #     if (length(as.double(outliers_Y[[j_ind]]))==0) {
-# #       
-# #       Y_std[i_ind,j_ind]=sqrt(var(Y_ERRORES[,j_ind]))
-# #       
-# #     }else{
-# #       
-# #       Y_std[i_ind,j_ind]=sqrt(var(Y_ERRORES[-outliers_Y[[j_ind]],j_ind]))
-# #     }
-# #     
-# #     if (j_ind<25) {
-# #       
-# #       if (length(as.double(outliers_B[[j_ind]]))==0) {
-# #         
-# #         B_std[i_ind,j_ind]=sqrt(var(B_ERRORES[,j_ind]))
-# #         
-# #       }else{
-# #         B_std[i_ind,j_ind]=sqrt(var(B_ERRORES[-outliers_B[[j_ind]],j_ind]))
-# #         
-# #       }
-# #       
-# #     }
-# #     
-# #   }
-# # }
-# # 
-# # # Y  Gellar Goldsmith SS-VDFR SB-VDFR
-# # # B  Gellar Goldsmith SS-VDFR
-# # 
-# # aux_1=matrix(Y_std[1,],nrow = 4, ncol = 8, byrow = 1)
-# # aux_2=matrix(Y_std[2,],nrow = 4, ncol = 8, byrow = 1)
-# # aux_3=matrix(Y_std[3,],nrow = 4, ncol = 8, byrow = 1)
-# # 
-# # Y_matrix=rbind(aux_1, aux_2, aux_3)
-# # 
-# # aux_1=matrix(B_std[1,],nrow = 3, ncol = 8, byrow = 1)
-# # aux_2=matrix(B_std[3,],nrow = 3, ncol = 8, byrow = 1)
-# # 
-# # B_matrix=rbind(aux_1, aux_2)
-# # 
-# # write_xlsx(as.data.frame(Y_matrix),path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Poisson/T_i Uniform/Y_sd.xlsx")
-# # 
-# # write_xlsx(as.data.frame(B_matrix),path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones/Adaptive/Curvas más suaves/K-fold/R=100/1 y 1/Poisson/T_i Uniform/B_sd.xlsx")
-# # 
-# # # COMPUTATION TIMES
-# # 
-# # colMeans(time_SOP)
-# # 
-# # colMeans(time_no_vc)
-# # 
-# # colMeans(time_Gellar)
-# # 
-# # colMeans(time_Goldsmith)
-# # 
 
-#### Y
+#### Y ##################
 
 aux_old_Y=c(aux_save$Y_ERROR_2_sop...1.,aux_save$Y_ERROR_2_ellos...1.,aux_save$Y_ERROR_2_te_ellos...1.)
 
@@ -808,13 +634,24 @@ B_plot=ggplot(new_version_B,aes(x=method,y=values,fill=method))+
 
 B_plot
 
-case=90
-
+case=100
 plot(X_s[case,])
-lines(X_se[case,])
+lines(X_se[case,],type="o",col=3)
+lines(BB_all$X_hat[case,],type="o",col=2)
+
+case=1
+plot(X_s[test[case],])
+lines(X_test[case,],type="o",col=3)
+lines(BB_test$X_hat[case,],col=2,type="o")
 
 
+j=1
+case=which(groups==group)[j]
+plot(Beta[which(groups==group)[j],,2])
+lines(Beta_sop,col=2)
+lines(Beta_refund)
 
-
-
-
+case=10
+plot(Beta[case,,2])
+lines(Beta_VD[case,1:M[case],iter,iter_out])
+lines(Beta_FFVD[case,1:M[case],iter,iter_out],col=2,lwd=2)
