@@ -14,6 +14,7 @@ options(error=NULL)
 library(remotes)
 # install_github("Pavel-Hernadez-Amaro/VDPO") 
 library(VDPO)
+library(parallel)
 
 ### DEFINE CONSTANSTS ###
 Rsq=0.95
@@ -26,11 +27,16 @@ k=10  # NUMBER OF GROUPS IN THE K-fold
 
 fold=N/k
 
-R=10 # NUMBER OF ITERATIONS FOR THE SIMULATION STUDY
+R=100 # NUMBER OF ITERATIONS FOR THE SIMULATION STUDY
 
-c1=10
-c2=10
-c3=10
+c1=30
+c2=50
+c3=30
+
+# c1=30
+# c2=50
+# c3=30
+
 
 registrated_points <- function(x) {
   J.i <- sum(!is.na(x))
@@ -154,11 +160,11 @@ function_par <- function(iter, iter_out) {
   
   # plot_ly(z=Beta[,,2], type="surface")
   
-  var_e <- (1 / Rsq - 1) * stats::var(nu) # (1-Rsq)*var(nu[ind,])
+  # var_e <- (1 / Rsq - 1) * stats::var(nu) # (1-Rsq)*var(nu[ind,])
+  # 
+  # y=nu+rnorm(N,sd = sqrt(var_e)) # ADDING NOISE TO THE GAUSSIAN MODEL
   
-  y=nu+rnorm(N,sd = var_e) # ADDING NOISE TO THE GAUSSIAN MODEL
-  
-  # y=rpois(N,exp(nu)) # POISSON MODEL ##### CAHNGE THE ERROR EQUATIONS IN LINE 477
+  y=rpois(N,exp(nu)+5) # POISSON MODEL ##### CAHNGE THE ERROR EQUATIONS IN LINE 477
   
   # y=rbinom(N,1,(exp(nu)/(1+exp(nu)))) # BINOMIAL MODEL
   
@@ -231,18 +237,18 @@ function_par <- function(iter, iter_out) {
     
     formula <- y_train ~ ffvd(X_train, t, nbasis = c(c1,c2,c3))
     BB=ffvd(X_train, t[1:max(M_train)], nbasis = c(c1,c2,c3))
-    res <- VDPO(formula = formula, data = data_train)#,family = poisson())
+    res <- VDPO(formula = formula, data = data_train,family = poisson())
     
     #
     
     # MODEL ESTIMATION USING GELLAR APPROACH
     
-    fit_Gellar <- pfr(y_train ~ lf.vd(X_train,k=89))#,family = poisson())
+    fit_Gellar <- pfr(y_train ~ lf.vd(X_train,k=89),family = poisson())
         #
     
     # MODEL ESTIMATION USING GOLDSMITH APPROACH
     
-    fit_Gellar_te <- pfr(y_train ~ lf(X_reg_train, bs = "ps",k=15,presmooth = "bspline",presmooth.opts = list(nbasis=15)))#,family = poisson())
+    fit_Gellar_te <- pfr(y_train ~ lf(X_reg_train, bs = "ps",k=15,presmooth = "bspline",presmooth.opts = list(nbasis=15)),family = poisson())
     
 
     #################### HERE ENDS THE ESTIMATION OF THE MODELS
@@ -317,15 +323,15 @@ function_par <- function(iter, iter_out) {
     
     # ESTIMATION ERRORS FOR THE TEST DATA SET IN THE CASE OF NORMAL RESPONSE
     
-    error_group_VDFR[group]=sqrt(sum((y_test-y_h_ellos)^2)/fold)
-    error_group_FF_VDFR[group]=sqrt(sum((y_test-y_h_sop)^2)/fold)
-    error_group_Carmen[group]=sqrt(sum((y_test-y_h_ellos_te)^2)/fold)
+    # error_group_VDFR[group]=sqrt(sum((y_test-y_h_ellos)^2)/fold)
+    # error_group_FF_VDFR[group]=sqrt(sum((y_test-y_h_sop)^2)/fold)
+    # error_group_Carmen[group]=sqrt(sum((y_test-y_h_ellos_te)^2)/fold)
     
     # ESTIMATION ERRORS FOR THE TEST DATA SET IN THE CASE OF POISSON RESPONSE
     
-    # error_group_VDFR[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_ellos[iter,,iter_out])))^2)/fold)
-    # error_group_Carmen[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_ellos_te[iter,,iter_out])))^2)/fold)
-    # error_group_FF_VDFR[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_sop[iter,,iter_out])))^2)/fold)
+    error_group_VDFR[group]=sqrt(sum((y_test-(exp(y_h_ellos)))^2)/fold)
+    error_group_Carmen[group]=sqrt(sum((y_test-(exp(y_h_ellos_te)))^2)/fold)
+    error_group_FF_VDFR[group]=sqrt(sum((y_test-(exp(y_h_sop)))^2)/fold)
     
     
   } # HERE END THE FOR OF group = 1:fold
@@ -338,7 +344,7 @@ function_par <- function(iter, iter_out) {
   
   formula <- y ~ ffvd(X_se, t, nbasis = c(c1,c2,c3))
   BB_all=ffvd(X_se, t, nbasis = c(c1,c2,c3))
-  res_Beta <- VDPO(formula = formula, data = data)#,family = poisson())
+  res_Beta <- VDPO(formula = formula, data = data,family = poisson())
   
   #   B_data=ffvd(X_se, t, nbasis = c(c1,c2,c3))
   #   
@@ -367,7 +373,7 @@ function_par <- function(iter, iter_out) {
   
   #####
   
-  fit_Gellar_all <- pfr(y ~ lf.vd(X_se,k=89))#,family = poisson())
+  fit_Gellar_all <- pfr(y ~ lf.vd(X_se,k=89),family = poisson())
   
   Beta_G=coef(fit_Gellar_all, n=c(length(t),length(unique(M))))$value
   
@@ -394,47 +400,35 @@ function_par <- function(iter, iter_out) {
   
 } # HERE ENDS THE MIDDLE FOR ITERATION (RUNS ON R) 
 
-ncores <- detectCores() - 2
+ncores <- min((detectCores()/2)-1,R)
 
-library(parallel)
-r <- parallel::mclapply(1:10, function(i) {
-  function_par(iter = i, iter_out = 2)
-}, mc.cores = ncores)
- 
-iter               <- sapply(r, "[[", 1)
-Y_ERROR_2_ellos    <- sapply(r, "[[", 2)[iter]
-Y_ERROR_2_te_ellos <- sapply(r, "[[", 3)[iter]
-Y_ERROR_2_sop      <- sapply(r, "[[", 4)[iter]
-error_Beta_VD      <- sapply(r, "[[", 5)[iter]
-error_Beta_FFVD    <- sapply(r, "[[", 6)[iter]
 
-Y_error <- cbind(Y_ERROR_2_ellos, Y_ERROR_2_te_ellos, Y_ERROR_2_sop)
-colnames(Y_error) <- c(
-  "Y_ERROR_2_ellos",
-  "Y_ERROR_2_te_ellos",
-  "Y_ERROR_2_sop"
-)
+# r <- parallel::mclapply(1:10, function(i) {
+#   function_par(iter = i, iter_out = 2)
+# }, mc.cores = ncores)
+# 
+# iter               <- sapply(r, "[[", 1)
+# Y_ERROR_2_ellos    <- sapply(r, "[[", 2)[iter]
+# Y_ERROR_2_te_ellos <- sapply(r, "[[", 3)[iter]
+# Y_ERROR_2_sop      <- sapply(r, "[[", 4)[iter]
+# error_Beta_VD      <- sapply(r, "[[", 5)[iter]
+# error_Beta_FFVD    <- sapply(r, "[[", 6)[iter]
+# 
+# Y_error <- cbind(Y_ERROR_2_ellos, Y_ERROR_2_te_ellos, Y_ERROR_2_sop)
+# colnames(Y_error) <- c(
+#   "Y_ERROR_2_ellos",
+#   "Y_ERROR_2_te_ellos",
+#   "Y_ERROR_2_sop"
+# )
+# 
+# B_error <- cbind(error_Beta_VD, error_Beta_FFVD)
+# colnames(B_error) <- c(
+#   "error_Beta_VD",
+#   "error_Beta_FFVD"
+# )
 
-B_error <- cbind(error_Beta_VD, error_Beta_FFVD)
-colnames(Y_error) <- c(
-  "error_Beta_VD",
-  "error_Beta_FFVD"
-)
-
-cl <- makeCluster(getOption("cl.cores", 4))
-clusterExport(cl = cl, varlist = c(
-  "Rsq",
-  "N",
-  "J",
-  "k",
-  "fold",
-  "R",
-  "c1",
-  "c2",
-  "c3",
-  "registrated_points",
-  "function_par"
-), envir = environment())
+cl <- makeCluster(getOption("cl.cores", ncores))
+clusterExport(cl = cl, varlist = c("Rsq","N","J","k","fold","R","c1","c2","c3","registrated_points","function_par"), envir = environment())
 clusterEvalQ(cl, {
   library(refund)
   library(fda)
@@ -452,18 +446,23 @@ clusterEvalQ(cl, {
   library(remotes)
   library(VDPO)
 })
-re <- parLapply(cl, 1:10, function(i) {
-  function_par(iter = i, iter_out = 2)
+
+# MIRA LA ITER 53 CON BETA 2
+
+re <- parLapply(cl, 1:R, function(i) {
+  function_par(iter = i, iter_out = 1)
 })
+
 stopCluster(cl)
 
-iter               <- sapply(r, "[[", 1)
-Y_ERROR_2_ellos    <- sapply(r, "[[", 2)[iter]
-Y_ERROR_2_te_ellos <- sapply(r, "[[", 3)[iter]
-Y_ERROR_2_sop      <- sapply(r, "[[", 4)[iter]
-error_Beta_VD      <- sapply(r, "[[", 5)[iter]
-error_Beta_FFVD    <- sapply(r, "[[", 6)[iter]
+iter               <- sapply(re, "[[", 1)
+Y_ERROR_2_ellos    <- sapply(re, "[[", 2)[iter]
+Y_ERROR_2_te_ellos <- sapply(re, "[[", 3)[iter]
+Y_ERROR_2_sop      <- sapply(re, "[[", 4)[iter]
+error_Beta_VD      <- sapply(re, "[[", 5)[iter]
+error_Beta_FFVD    <- sapply(re, "[[", 6)[iter]
 
+# Y_error <- cbind(Y_ERROR_2_ellos, Y_ERROR_2_sop)
 Y_error <- cbind(Y_ERROR_2_ellos, Y_ERROR_2_te_ellos, Y_ERROR_2_sop)
 colnames(Y_error) <- c(
   "Y_ERROR_2_ellos",
@@ -472,8 +471,41 @@ colnames(Y_error) <- c(
 )
 
 B_error <- cbind(error_Beta_VD, error_Beta_FFVD)
-colnames(Y_error) <- c(
+colnames(B_error) <- c(
   "error_Beta_VD",
   "error_Beta_FFVD"
 )
 
+apply(B_error,2,mean)
+apply(Y_error,2,mean)
+
+# Y_ERRORES_DF=data.frame(values=c(Y_error[,1],Y_error[,2]),method=as.factor(c(rep("VDFR",R),rep("FF-VDFR",R))))
+Y_ERRORES_DF=data.frame(values=c(Y_error[,1],Y_error[,2],Y_error[,3]),method=as.factor(c(rep("VDFR",R),rep("SOF",R),rep("FF-VDFR",R))))
+
+Y_plot=ggplot(Y_ERRORES_DF,aes(x=method,y=values,fill=method))+
+  geom_violin()+
+  ylab("Error") +
+  scale_x_discrete(labels = NULL, breaks = NULL)+
+  xlab("")+
+  theme_bw() +
+  stat_summary(fun=median, geom="point", size=2, color="black")
+
+Y_plot
+
+B_ERRORES_DF=data.frame(values=c(B_error[,1],B_error[,2]),method=as.factor(c(rep("VDFR",R),rep("FF-VDFR",R))))
+
+B_plot=ggplot(B_ERRORES_DF,aes(x=method,y=values,fill=method))+
+  geom_violin()+
+  ylab("Error") +
+  scale_x_discrete(labels = NULL, breaks = NULL)+
+  xlab("")+
+  theme_bw() +
+  stat_summary(fun=median, geom="point", size=2, color="black")
+
+B_plot
+
+
+# plot_ly(z=Beta_VD, type="surface")
+# plot_ly(z=Beta_FFVD, type="surface")
+# plot_ly(z=Beta[,,2], type="surface")
+ 

@@ -12,7 +12,7 @@ library(gridExtra)
 library(dismo)
 options(error=NULL)
 library(remotes)
-# install_github("Pavel-Hernadez-Amaro/VDPO") 
+# install_github("Pavel-Hernadez-Amaro/VDPO")
 library(VDPO)
 
 ########### Here we generate the data and set some fixed parameters
@@ -27,7 +27,7 @@ k=10  # NUMBER OF GROUPS IN THE K-fold
 
 fold=N/k
 
-R=50 # NUMBER OF ITERATIONS FOR THE SIMULATION STUDY
+R=10 # NUMBER OF ITERATIONS FOR THE SIMULATION STUDY
 
 c1=30
 c2=50
@@ -100,7 +100,7 @@ err_y_ellos_all=err_y_sop_all=rep(0,R)
 
 start=proc.time()
 
-for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
+for (iter_out in 3) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
   
   print(c("case = ",iter_out))
   
@@ -221,11 +221,11 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     # plot_ly(z=Beta[,,2], type="surface")
     
-    var_e <- (1 / Rsq - 1) * stats::var(nu) # (1-Rsq)*var(nu[ind,])
+    # var_e <- (1 / Rsq - 1) * stats::var(nu) # (1-Rsq)*var(nu[ind,])
+    # 
+    # y=nu+rnorm(N,sd = sqrt(var_e)) # ADDING NOISE TO THE GAUSSIAN MODEL
     
-    y=nu+rnorm(N,sd = var_e) # ADDING NOISE TO THE GAUSSIAN MODEL
-    
-    # y=rpois(N,exp(nu)) # POISSON MODEL ##### CAHNGE THE ERROR EQUATIONS IN LINE 477
+    y=rpois(N,exp(nu)+1) # POISSON MODEL ##### CAHNGE THE ERROR EQUATIONS IN LINE 477
     
     # y=rbinom(N,1,(exp(nu)/(1+exp(nu)))) # BINOMIAL MODEL
     
@@ -300,7 +300,7 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       formula <- y_train ~ ffvd(X_train, t, nbasis = c(c1,c2,c3))
       BB=ffvd(X_train, t[1:max(M_train)], nbasis = c(c1,c2,c3))
-      res <- VDPO(formula = formula, data = data_train)#,family = poisson())
+      res <- VDPO(formula = formula, data = data_train,family = poisson())
       
       end_SOP=proc.time()
       time_SOP[iter,iter_out]=end_SOP[1]-start_SOP[1]
@@ -310,7 +310,7 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       start_Gellar=proc.time()
       
-      fit_Gellar <- pfr(y_train ~ lf.vd(X_train,k=89))#,family = poisson())
+      fit_Gellar <- pfr(y_train ~ lf.vd(X_train,k=89),family = poisson())
       
       end_Gellar=proc.time()
       time_Gellar[iter,iter_out]=end_Gellar[1]-start_Gellar[1]
@@ -320,7 +320,7 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       start_Goldsmith=proc.time()
       
-      fit_Gellar_te <- pfr(y_train ~ lf(X_reg_train, bs = "ps",k=15,presmooth = "bspline",presmooth.opts = list(nbasis=15)))#,family = poisson())
+      fit_Gellar_te <- pfr(y_train ~ lf(X_reg_train, bs = "ps",k=15,presmooth = "bspline",presmooth.opts = list(nbasis=15)),family = poisson())
       
       end_Goldsmith=proc.time()
       time_Goldsmith[iter,iter_out]=end_Goldsmith[1]-start_Goldsmith[1]
@@ -393,15 +393,15 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       # ESTIMATION ERRORS FOR THE TEST DATA SET IN THE CASE OF NORMAL RESPONSE
       
-      error_group_VDFR[iter,group,iter_out]=sqrt(sum((y_test-y_h_ellos[iter,,iter_out])^2)/fold)
-      error_group_FF_VDFR[iter,group,iter_out]=sqrt(sum((y_test-y_h_sop[iter,,iter_out])^2)/fold)
-      error_group_Carmen[iter,group,iter_out]=sqrt(sum((y_test-y_h_ellos_te[iter,,iter_out])^2)/fold)
+      # error_group_VDFR[iter,group,iter_out]=sqrt(sum((y_test-y_h_ellos[iter,,iter_out])^2)/fold)
+      # error_group_FF_VDFR[iter,group,iter_out]=sqrt(sum((y_test-y_h_sop[iter,,iter_out])^2)/fold)
+      # error_group_Carmen[iter,group,iter_out]=sqrt(sum((y_test-y_h_ellos_te[iter,,iter_out])^2)/fold)
       
       # ESTIMATION ERRORS FOR THE TEST DATA SET IN THE CASE OF POISSON RESPONSE
       
-      # error_group_VDFR[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_ellos[iter,,iter_out])))^2)/fold)
-      # error_group_Carmen[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_ellos_te[iter,,iter_out])))^2)/fold)
-      # error_group_FF_VDFR[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_sop[iter,,iter_out])))^2)/fold)
+      error_group_VDFR[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_ellos[iter,,iter_out])))^2)/fold)
+      error_group_Carmen[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_ellos_te[iter,,iter_out])))^2)/fold)
+      error_group_FF_VDFR[iter,group,iter_out]=sqrt(sum((y_test-(exp(y_h_sop[iter,,iter_out])))^2)/fold)
       
       
     } # HERE END THE FOR OF group = 1:fold
@@ -414,7 +414,7 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     formula <- y ~ ffvd(X_se, t, nbasis = c(c1,c2,c3))
     BB_all=ffvd(X_se, t, nbasis = c(c1,c2,c3))
-    res_Beta <- VDPO(formula = formula, data = data)#,family = poisson())
+    res_Beta <- VDPO(formula = formula, data = data,family = poisson())
 
   #   B_data=ffvd(X_se, t, nbasis = c(c1,c2,c3))
   #   
@@ -463,7 +463,7 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
     
     #####
     
-    fit_Gellar_all <- pfr(y ~ lf.vd(X_se,k=89))#,family = poisson())
+    fit_Gellar_all <- pfr(y ~ lf.vd(X_se,k=89),family = poisson())
     
     Beta_G[[iter]]=coef(fit_Gellar_all, n=c(length(t),length(unique(M))))$value
     
@@ -486,8 +486,8 @@ for (iter_out in 2) { # HERE WE CAN SELECTED WHICH SCENARIO(S) SIMULATE
       
       }
     
-    err_y_sop_all[iter]=sqrt(sum((y-y_h_sop_all[iter,,iter_out])^2)/N)
-    err_y_ellos_all[iter]=sqrt(sum((y-y_h_ellos_all[iter,,iter_out])^2)/N)
+    err_y_sop_all[iter]=sqrt(sum((y-exp(y_h_sop_all[iter,,iter_out]))^2)/N)
+    err_y_ellos_all[iter]=sqrt(sum((y-exp(y_h_ellos_all[iter,,iter_out]))^2)/N)
       
 
     
@@ -510,11 +510,11 @@ err_Y_FFVD=apply(X = Y_ERROR_2_sop, MARGIN = 2, FUN = mean)
 err_Y_VD=apply(X = Y_ERROR_2_ellos, MARGIN = 2, FUN = mean)
 err_Y_SOF=apply(X = Y_ERROR_2_te_ellos, MARGIN = 2, FUN = mean)
 
-case_iter=1
+case_iter=3
 
-plot_ly(z=Beta_VD[,,case_iter,2], type="surface")
-plot_ly(z=Beta_FFVD[,,case_iter,2], type="surface")
-plot_ly(z=Beta[,,2], type="surface")
+plot_ly(z=Beta_VD[,,case_iter,iter_out], type="surface")
+plot_ly(z=Beta_FFVD[,,case_iter,iter_out], type="surface")
+plot_ly(z=Beta[,,iter_out], type="surface")
 
 # save.image("C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/1er Paper/Codigo/Simulation-1st-Paper/Results new method/vacations.RData")
 
@@ -530,7 +530,7 @@ Y_ERRORES=data.frame(Y_ERROR_2_ellos,Y_ERROR_2_te_ellos,Y_ERROR_2_sop) # #Y_ERRO
 # 
 # write_xlsx(Y_ERRORES,path = "C:/Users/user/Desktop/Trabajo/Escuela/Doctorado/Pavel/Tesis/Código/Mix models SOP/Propios/Simulaciones K-fold good version N_200/Poisson_Uniform_N_200/Y_ERRORES.xlsx")
 
-Y_values=cbind(c(Y_ERRORES[,2],Y_ERRORES[,10],Y_ERRORES[,18]))
+Y_values=cbind(c(Y_ERRORES[,3],Y_ERRORES[,11],Y_ERRORES[,19]))
 Y_values_1=cbind(c(Y_ERRORES[,1],Y_ERRORES[,3],Y_ERRORES[,5]))
 Y_values_2=cbind(c(Y_ERRORES[,2],Y_ERRORES[,4],Y_ERRORES[,6]))
 Y_ERRORES_DF=data.frame(values=Y_values,method=as.factor(c(rep("VDFR",R),rep("SOF",R),rep("FF-VDFR",R))))
@@ -545,7 +545,7 @@ Y_plot=ggplot(Y_ERRORES_DF,aes(x=method,y=values,fill=method))+
 
 Y_plot
 
-B_values=cbind(c(B_ERRORES[,2],B_ERRORES[,10]))
+B_values=cbind(c(B_ERRORES[,3],B_ERRORES[,11]))
 B_values_1=cbind(c(B_ERRORES[,1],B_ERRORES[,3]))
 B_values_2=cbind(c(B_ERRORES[,2],B_ERRORES[,4]))
 B_ERRORES_DF=data.frame(values=B_values,method=as.factor(c(rep("FF-VDFR",R),rep("VDFR",R))))
